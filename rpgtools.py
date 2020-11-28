@@ -106,7 +106,8 @@ def _builtins_eval(item):
 
 class FunctionCall(Expression):
 	symbols = {
-		'max' : _builtins_max, 
+		'max' : _builtins_max,
+		'eval' : _builtins_eval,
 	}
 	def __init__(self, funame, args):
 		self.funame = funame.eval()
