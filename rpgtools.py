@@ -14,11 +14,14 @@ def evalexpr(expr):
 	parsedexpr = parse(expr)
 	print(parsedexpr.eval())
 
-grammar = Lark('''start: value
-									value: sequence | numeric
+grammar = Lark('''start: value | variable_set
+									variable_set: VAR " "* "=" " "* value
+									value: sequence | numeric | variable
+									variable: "$" VAR
+									VAR: /[a-zA-Z]\w*/
 									sequence: "[" sequence_items "]"
 									sequence_items: value | value / *, */ sequence_items
-									numeric: funcall | mathexpr | dicexpr | NUMBER | "(" numeric ")"
+									numeric: funcall | mathexpr | dicexpr | NUMBER | variable | "(" numeric ")"
 									mathexpr: numeric " "* OPERATOR " "* numeric
 									funcall: "[" FUNAME " " funcarglist "]"
 									funcarglist: arglist | kwargsets | arglist " " kwargsets
@@ -155,6 +158,21 @@ class ListConverter(Expression):
 	def __repr__(self):
 		return "ListConverter({})".format(self.value)
 
+context = {}
+
+class VariableSetter(Expression):
+	def __init__(self, varname, value):
+		self.varname = varname.eval()
+		self.value = value
+	def eval(self):
+		context[self.varname] = self.value.eval()
+
+class VariableGetter(Expression):
+	def __init__(self, varname):
+		self.varname = varname
+	def eval(self):
+		return context[self.varname.eval()]
+
 resolve = {
 	'dicexpr' : DiceExpression,
 	'NUMBER' : IntegerLiteral,
@@ -172,6 +190,9 @@ resolve = {
 	'kwargsets' : ListConverter,
 	'kwarglist' : ListConverter,
 	'KEYWORD' : Literal,
+	'variable_set' : VariableSetter,
+	'variable' : VariableGetter,
+	'VAR' : Literal,
 }
 
 if __name__=='__main__':
