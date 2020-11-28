@@ -75,6 +75,8 @@ class Literal(Expression):
 class IntegerLiteral(Literal):
 	def __init__(self, value):
 		self.value = int(value)
+	def __repr__(self):
+		return "IntegerLiteral({})".format(self.value)
 class MathExpression(Expression):
 	operators = {
 		'+' : (lambda x, y: x + y),
@@ -114,19 +116,28 @@ def _builtins_eval(item):
 	else:
 		return item
 
+def _builtins_if(test, **kwargs):
+	then, els = kwargs['then'], kwargs['else']
+	#print(kwargs)
+	if test.eval() != 0:
+		return then[0].eval()
+	else:
+		return els[0].eval()
+
 class FunctionCall(Expression):
 	symbols = {
 		('max', 1, ()) : _builtins_max,
 		('eval', 1, ()) : _builtins_eval,
+		('if', 1, (('then', 1), ('else', 1))): _builtins_if,
 	}
 	def __init__(self, funame, args):
 		args = args.sequence()
 		self.args = args[0].sequence()
-		self.kwargs = {s[0]: s[1:] for s in [s.sequence() for s in args[1:]]}
-		print(self.kwargs)
-		self.kwargsets = tuple([(kw.eval(), len(s)) for kw, s in self.kwargs.items()])
+		self.kwargs = {s[0].eval(): s[1:] for s in [s.sequence() for s in args[1:]]}
+		#print(self.kwargs)
+		self.kwargsets = tuple([(kw, len(s)) for kw, s in self.kwargs.items()])
 		self.funame = (funame.eval(), len(self.args), self.kwargsets)
-		print(self.funame)
+		#print(self.funame)
 	def eval(self):
 		function = FunctionCall.symbols[self.funame]
 		return function(*self.args, **self.kwargs)
