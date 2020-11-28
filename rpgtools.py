@@ -20,8 +20,12 @@ grammar = Lark('''start: value
 									sequence_items: value | value / *, */ sequence_items
 									numeric: funcall | mathexpr | dicexpr | NUMBER | "(" numeric ")"
 									mathexpr: numeric " "* OPERATOR " "* numeric
-									funcall: "[" FUNAME " " arglist "]"
-									arglist: arg | arg arglist
+									funcall: "[" FUNAME " " funcarglist "]"
+									funcarglist: arglist | kwargsets | arglist " " kwargsets
+									kwargsets: kwarglist | kwarglist " " kwargsets
+									arglist: arg | arg " " arglist
+									kwarglist: KEYWORD " " arglist
+									KEYWORD: /[a-zA-Z]\w*/
 									FUNAME: /[a-zA-Z]\w*/
 									arg: value
 									OPERATOR: /\+|\-|\*|\/|==|!=|<|>|<=|>=/
@@ -112,15 +116,20 @@ def _builtins_eval(item):
 
 class FunctionCall(Expression):
 	symbols = {
-		'max' : _builtins_max,
-		'eval' : _builtins_eval,
+		('max', 1, ()) : _builtins_max,
+		('eval', 1, ()) : _builtins_eval,
 	}
 	def __init__(self, funame, args):
-		self.funame = funame.eval()
-		self.args = args.sequence()
+		args = args.sequence()
+		self.args = args[0].sequence()
+		self.kwargs = {s[0]: s[1:] for s in [s.sequence() for s in args[1:]]}
+		print(self.kwargs)
+		self.kwargsets = tuple([(kw.eval(), len(s)) for kw, s in self.kwargs.items()])
+		self.funame = (funame.eval(), len(self.args), self.kwargsets)
+		print(self.funame)
 	def eval(self):
 		function = FunctionCall.symbols[self.funame]
-		return function(*self.args)
+		return function(*self.args, **self.kwargs)
 
 class ListConverter(Expression):
 	def __init__(self, head, tail=None):
@@ -132,6 +141,8 @@ class ListConverter(Expression):
 		return self.value
 	def eval(self):
 		return [item.eval() for item in self.value]
+	def __repr__(self):
+		return "ListConverter({})".format(self.value)
 
 resolve = {
 	'dicexpr' : DiceExpression,
@@ -146,6 +157,10 @@ resolve = {
 	'value' : None,
 	'sequence' : None,
 	'sequence_items' : ListConverter,
+	'funcarglist' : ListConverter,
+	'kwargsets' : ListConverter,
+	'kwarglist' : ListConverter,
+	'KEYWORD' : Literal,
 }
 
 if __name__=='__main__':
