@@ -24,7 +24,7 @@ grammar = Lark('''start: value
 									arglist: arg | arg arglist
 									FUNAME: /[a-zA-Z]\w*/
 									arg: value
-									OPERATOR: /\+|\-|\*|\//
+									OPERATOR: /\+|\-|\*|\/|==|!=|<|>|<=|>=/
 									dicexpr: numeric "d" numeric
 									NUMBER: /\d+/
   						 ''')
@@ -77,6 +77,12 @@ class MathExpression(Expression):
 		'-' : (lambda x, y: x - y),
 		'*' : (lambda x, y: x * y),
 		'/' : (lambda x, y: x / y),
+		'==' : (lambda x, y: 1 if x == y else 0),
+		'!=' : (lambda x, y: 1 if x == y else 0),
+		'<' : (lambda x, y: 1 if x < y else 0),
+		'>' : (lambda x, y: 1 if x > y else 0),
+		'>=' : (lambda x, y: 1 if x >= y else 0),
+		'<=' : (lambda x, y: 1 if x <= y else 0),
 	}
 	def __init__(self, lhs, operator, rhs):
 		self.operator = MathExpression.operators[operator.eval()]
