@@ -1,8 +1,10 @@
-#!/usr/bin/python
+#!/Usr/bin/python
 from random import randrange
 import readline
 from lark import Lark
 import lark
+from collections import defaultdict
+from functools import reduce
 
 def main():
 	try:
@@ -63,24 +65,44 @@ def transform(items):
 		result_items.append(result)
 	return result_items
 
+def cartesian_product(lhs, rhs):
+	result = {}
+	for k1, p1 in lhs.items():
+		for k2, p2 in rhs.items():
+			result[(*k1, *k2)] = p1*p2
+	return result
+
+def fold(distr, func):
+	result = defaultdict(lambda: 0.0)
+	for k, p in distr.items():
+		result[func(*k),] += p
+	return result
+
 class Expression():
 	def eval(self):
 		raise NotImplementedError
 	def sequence(self):
 		return [self.eval()]
 
-class Literal(Expression):
+class ValueExpression(Expression):
+	def distribution(self):
+		raise NotImplementedError
+
+class Literal(ValueExpression):
 	def __init__(self, value):
 		self.value = value
 	def eval(self):
 		return self.value
+	def distribution(self):
+		return {(self.value,): 1.0}
 
 class IntegerLiteral(Literal):
 	def __init__(self, value):
 		self.value = int(value)
 	def __repr__(self):
 		return "IntegerLiteral({})".format(self.value)
-class MathExpression(Expression):
+
+class MathExpression(ValueExpression):
 	operators = {
 		'+' : (lambda x, y: x + y),
 		'-' : (lambda x, y: x - y),
@@ -99,8 +121,11 @@ class MathExpression(Expression):
 		self.rhs = rhs
 	def eval(self):
 		return self.operator(self.lhs.eval(), self.rhs.eval())
+	def distribution(self):
+		product = cartesian_product(self.lhs.distribution(), self.rhs.distribution())
+		return fold(product, self.operator)
 
-class DiceExpression(Expression):
+class DiceExpression(ValueExpression):
 	def __init__(self, number, sides):
 		self.number, self.sides = number, sides
 	def	eval(self):
@@ -109,16 +134,38 @@ class DiceExpression(Expression):
 		sides = self.sides.eval()
 		number = self.number.eval()
 		return [randrange(1,sides+1) for _ in range(number)]
+	def dice_pdf(sides):
+		result = {}
+		for i in range(1, sides+1):
+			result[(i,)] = 1.0/sides
+		return result
+	def distribution(self):
+		qual_pdf = cartesian_product(self.number.distribution(), self.sides.distribution())
+		print(qual_pdf)
+		result = defaultdict(lambda: 0.0)
+		for k, p in qual_pdf.items():
+			number, sides = k
+			expanded = [DiceExpression.dice_pdf(sides) for _ in range(number)]
+			def sum_pdf(lhs, rhs):
+				return fold(cartesian_product(lhs, rhs), lambda x, y: x + y)
+			total_pdf = reduce(sum_pdf, expanded)
+			for k2, p2 in total_pdf.items():
+				result[k2] += p * p2
+		return result
+
+def _builtins_distribution(item):
+	return dict(item.distribution())
 
 def _builtins_max(seq):
-	return max([_builtins_eval(item) for item in seq.sequence()])
-
-def _builtins_eval(item):
-	if isinstance(item, Expression):
-		return item.eval()
+	s = seq.sequence()
+	head, tail = s[0], s[1:]
+	if len(s) == 1:
+			return head
+	tail_max = _builtins_max(tail)
+	if head > tail_max:
+		return tail_max
 	else:
-		return item
-
+	
 def _builtins_if(test, **kwargs):
 	then, els = kwargs['then'], kwargs['else']
 	#print(kwargs)
@@ -127,11 +174,39 @@ def _builtins_if(test, **kwargs):
 	else:
 		return els[0].eval()
 
+def Monad(Expression):
+	def apply(self, function):
+		raise NotImplementedError
+
+def MonadLiteral(Monad):
+	def __init__(self, wrapped):
+		self.wrapped = wrapped
+	def apply(self, function):
+		return function(self)
+	def eval(self):
+		return self.wrapped.eval()
+	def sequence(self):
+		return self.wrapped.sequence()
+	def distribution(self):
+		return self.wrapped.distribution()
+
+def SequenceMonad(Monad):
+	def __init__(self, wrapped_vals):
+		self.wrapped_vals = wrapped_vals
+	def apply(self, function):
+		return SequenceMonad(map(function, self.wrapped_vals))
+	def eval(self):
+		[wrapped_val.eval() for wrapped_val in self.wrapped_vals]
+	def sequence(self):
+		[wrapped_val.sequence() for wrapped_val in self.wrapped_vals]
+	def distribution(self):
+		[wrapped_val.sequence() for wrapped_val in self.wrapped_vals]
+
 class FunctionCall(Expression):
 	symbols = {
 		('max', 1, ()) : _builtins_max,
-		('eval', 1, ()) : _builtins_eval,
 		('if', 1, (('then', 1), ('else', 1))): _builtins_if,
+		('distribution', 1, ()): _builtins_distribution,
 	}
 	def __init__(self, funame, args):
 		args = args.sequence()
@@ -144,6 +219,11 @@ class FunctionCall(Expression):
 	def eval(self):
 		function = FunctionCall.symbols[self.funame]
 		return function(*self.args, **self.kwargs)
+	def distribution(self):
+		self.kwargs['__distr'] = True
+		result = self.eval()
+		self.kwargs['__distr'] = False
+		return result
 
 class ListConverter(Expression):
 	def __init__(self, head, tail=None):
