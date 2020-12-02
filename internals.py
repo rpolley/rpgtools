@@ -1,7 +1,7 @@
 from builtin_functions import * 
 from collections import defaultdict
 from random import randrange
-from util import cartesian_product, fold
+from util import cartesian_product, fold, scalar_product_accumulate
 from functools import reduce
 
 class Expression():
@@ -13,6 +13,8 @@ class Expression():
 class ValueExpression(Expression):
 	def distribution(self):
 		raise NotImplementedError
+	def distribution_sequence(self):
+		return [self.distribution()]
 
 class Literal(ValueExpression):
 	def __init__(self, value):
@@ -67,23 +69,43 @@ class DiceExpression(ValueExpression):
 		return result
 	def distribution(self):
 		qual_pdf = cartesian_product(self.number.distribution(), self.sides.distribution())
-		print(qual_pdf)
-		result = defaultdict(lambda: 0.0)
+		result = None
 		for k, p in qual_pdf.items():
 			number, sides = k
 			expanded = [DiceExpression.dice_pdf(sides) for _ in range(number)]
 			def sum_pdf(lhs, rhs):
 				return fold(cartesian_product(lhs, rhs), lambda x, y: x + y)
 			total_pdf = reduce(sum_pdf, expanded)
-			for k2, p2 in total_pdf.items():
-				result[k2] += p * p2
+			result = scalar_product_accumulate(total_pdf, p, result)
 		return result
+	def distribution_sequence(self):
+		number_distr = self.number.distribution()
+		sides_distr = self.sides.distribution()
+		max_dice, = max(number_distr.keys())
+		dice = []
+		for dn in range(1,int(max_dice)+1):
+			dn_unit = {(dn,): 1.0}
+			at_least_dn = fold(cartesian_product(number_distr, dn_unit), lambda x, y: y <= x)
+			dn_exists_prob = at_least_dn[True,]
+			dice_n = None
+			for sides, sides_p in sides_distr.items():
+				sides, = sides
+				dice_n = scalar_product_accumulate(DiceExpression.dice_pdf(sides), sides_p*dn_exists_prob, dice_n)
+			#todo: handle this better
+			dice_n = scalar_product_accumulate({(0.0,) : 1.0}, 1-dn_exists_prob, dice_n)
+			dice.append(dice_n)
+		return dice			
 
 class FunctionCall(Expression):
 	symbols = {
 		('max', 1, ()) : builtins_max,
 		('if', 1, (('then', 1), ('else', 1))): builtins_if,
 		('distribution', 1, ()): builtins_distribution,
+	}
+	distr_symbols = {
+		('max', 1, ()) : builtins_max_distribution,
+		('if', 1, (('then', 1), ('else', 1))): builtins_if_distribution,
+		('distribution', 1, ()): builtins_distribution_distribution,
 	}
 	def __init__(self, funame, args):
 		args = args.sequence()
@@ -97,10 +119,8 @@ class FunctionCall(Expression):
 		function = FunctionCall.symbols[self.funame]
 		return function(*self.args, **self.kwargs)
 	def distribution(self):
-		self.kwargs['__distr'] = True
-		result = self.eval()
-		self.kwargs['__distr'] = False
-		return result
+		function = FunctionCall.distr_symbols[self.funame]
+		return function(*self.args, **self.kwargs)
 
 class ListConverter(Expression):
 	def __init__(self, head, tail=None):
