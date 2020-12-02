@@ -1,11 +1,16 @@
 from util import cartesian_product, fold
 from collections import defaultdict
+
+# calculate the distribution of an item
+# just delegate this to the item's distribution method
 def builtins_distribution(item):
 	return dict(item.distribution())
 
+# if we're already calculating the distribution, we don't need to do anything
 def builtins_distribution_distribution(item):
 	return item
 
+# get the largest member of an item when it's viewed as a sequence
 def builtins_max(seq):
 	return max(seq.sequence())
 
@@ -16,6 +21,7 @@ def builtins_max_distribution(seq):
 		m = fold(cartesian_product(m, distr), max)
 	return m
 
+# evaluate test, and if it's 0 return the value of the expression passed to else, otherwise use the one passed to then
 def builtins_if(test, **kwargs):
 	then, els = kwargs['then'], kwargs['else']
 	#print(kwargs)
