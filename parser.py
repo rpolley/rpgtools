@@ -4,8 +4,8 @@ from internals import *
 # language grammar
 grammar = Lark('''
 									start: statement
-									funtion_declaration: function_signature /\s/+ block
-									function_signature: "define" " "+ FUNAME " "* "[" args_declaration " "* "," " "* kwargs_declaration ]
+									function_declaration: function_signature /\s/+ block
+									function_signature: "define" " "+ FUNAME " "* "[" args_declaration " "* "," " "* kwargs_declaration "]"
 									kwargs_declaration: KEYWORD ":" " "* args_declaration
 									args_declaration: var_declaration | var_declaration " "* "," " "* args_declaration
 									var_declaration: "$" VAR
@@ -57,13 +57,13 @@ resolve = {
 	'variable' : VariableGetter,
 	'VAR' : Literal,
 	'statement': None,
-	'statements': ListConverter
+	'statements': ListConverter,
 	'block' : Block,
-	'function_declaration': FunctionDeclaration,
-	'function_signature': FunctionSignature,
-	'output_statement': OutputStatement,
-	'kwargs_declaration': ListConverter,
-	'args_declaration': ListConverter,
+	#'function_declaration': FunctionDeclaration,
+	#'function_signature': FunctionSignature,
+	'output_statement': ReturnStatement,
+	#'kwargs_declaration': ListConverter,
+	#'args_declaration': ListConverter,
 }
 
 # transform a string into an internal representation
@@ -81,7 +81,7 @@ def transform(items):
 		# these are at different members for lark Tree nodes and tokens
 		if type(item) == lark.tree.Tree: # handle Tree nodes
 			item_type = item.data
-			item_value = transfrm(item.children) # transform the node's children, and use the result as the node's "data"
+			item_value = transform(item.children) # transform the node's children, and use the result as the node's "data"
 		else: # handle tokens
 			item_type = item.type
 			if item_type[0:6] == "__ANON": # ignore "anonymous" tokens created by the parser
@@ -94,5 +94,3 @@ def transform(items):
 			result, = item_value
 		result_items.append(result)
 	return result_items
-
-

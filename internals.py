@@ -1,5 +1,5 @@
 from builtin_functions import * 
-from collections import defaultdict
+from collections import defaultdict, ChainMap
 from random import randrange
 from util import cartesian_product, fold, scalar_product_accumulate
 from functools import reduce
@@ -174,19 +174,81 @@ class ListConverter(Expression):
 	def __repr__(self):
 		return "ListConverter({})".format(self.value)
 
-context = {}
+class Context:
+	def top():
+		return Context._context
+	_context = ChainMap
+
 # represents an expression which assigns a value to a variable
-class VariableSetter(Expression):
+class VariableSetter(ValueExpression):
 	def __init__(self, varname, value):
 		self.varname = varname.eval()
 		self.value = value
+		self.context = Context.context()
 	def eval(self):
-		context[self.varname] = self.value.eval()
+		self.context.namespace[self.varname] = self.value.eval()
+	def distribution(self):
+		self.context.namespace[self.varname] = self.value.distribution()
 
 # represents an expression which gets a value from a variable
-class VariableGetter(Expression):
+class VariableGetter(ValueExpression):
 	def __init__(self, varname):
 		self.varname = varname
+		self.context = Context.top()
+	def lookup(self):
+		return self.context[self.varname.eval()]
 	def eval(self):
-		return context[self.varname.eval()]
+		val = self.lookup()
+		return val.eval()
+	def distribution(self):
+		val = self.lookup()
+		return val.distribution()
 
+class Block(ValueExpression):
+	def __init__(self, statements):
+		self.statements = statements.sequence()
+		self.prepared = False
+		self.context = None
+	def block_prepare(self, parent_context = None):
+		if self.prepared:
+			return
+		if parent_context == None:
+			self.context = Context.top()
+		else:
+			self.context = parent_context.new_child()
+
+		for statement in self.statements:
+			if hasattr(statement, 'block_prepare'):
+				statement.block_prepare(self.context)
+			elif hasattr(statement, 'context'):
+				statement.context = self.context
+		self.prepared = True
+	def _eval(self, method):
+		self.block_prepare()
+		output = None
+		for statement in self.statements:
+			eval_method = getattr(statement, method)
+			sval = eval_method()
+			if type(statement) == ReturnStatement:
+				output = sval
+				break
+		self.prepared = False
+		return output
+	def eval(self):
+		return self._eval('eval')
+	def distribution(self):
+		return self._eval('distribution')
+
+class ReturnStatement(ValueExpression):
+	def __init__(self, wrapped):
+		self.wrapped = wrapped
+	def eval(self):
+		return self.wrapped.eval()
+	def distribution(self):
+		return self.wrapped.distribution()
+	def distribution_sequence(self):
+		return self.wrapped.distribution_sequence()
+	def sequence(self):
+		return self.wrapped.sequence()
+
+		

@@ -1,11 +1,19 @@
 #!/usr/bin/python
 import readline
 from parser import parse
+from lark import ParseError
 
 def main():
 	try:
 		while(True):
-			evalexpr(input())
+			curr_expr = []
+			while(True):
+				try:
+					curr_expr.append(input())
+					evalexpr("\n".join(curr_expr))
+				except ParseError:
+					continue
+				break
 	except EOFError:
 		pass
 def evalexpr(expr):
