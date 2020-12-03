@@ -2,7 +2,17 @@ from lark import Lark
 import lark
 from internals import *
 # language grammar
-grammar = Lark('''start: value | variable_set
+grammar = Lark('''
+									start: statement
+									funtion_declaration: function_signature /\s/+ block
+									function_signature: "define" " "+ FUNAME " "* "[" args_declaration " "* "," " "* kwargs_declaration ]
+									kwargs_declaration: KEYWORD ":" " "* args_declaration
+									args_declaration: var_declaration | var_declaration " "* "," " "* args_declaration
+									var_declaration: "$" VAR
+									block: "do" /\s/+ statements /\s/+ "end"
+									statements: statement | statement statements
+									statement: value | variable_set | function_declaration | block | output_statement
+									output_statement: "output" " "+ statement
 									variable_set: VAR " "* "=" " "* value
 									value: sequence | numeric | variable
 									variable: "$" VAR
@@ -46,6 +56,14 @@ resolve = {
 	'variable_set' : VariableSetter,
 	'variable' : VariableGetter,
 	'VAR' : Literal,
+	'statement': None,
+	'statements': ListConverter
+	'block' : Block,
+	'function_declaration': FunctionDeclaration,
+	'function_signature': FunctionSignature,
+	'output_statement': OutputStatement,
+	'kwargs_declaration': ListConverter,
+	'args_declaration': ListConverter,
 }
 
 # transform a string into an internal representation
