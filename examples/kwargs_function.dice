@@ -1,0 +1,4 @@
+define add[$x to: $y] do
+  return $x + $y
+end
+[add 1 to 2]

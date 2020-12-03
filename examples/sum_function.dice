@@ -1,0 +1,4 @@
+define sum[$x, $y] do
+  return $x + $y
+end
+[sum 1 2]

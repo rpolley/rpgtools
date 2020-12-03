@@ -5,14 +5,15 @@ from internals import *
 grammar = Lark('''
 									start: statement
 									function_declaration: function_signature /\s/+ block
-									function_signature: "define" " "+ FUNAME " "* "[" args_declaration " "* "," " "* kwargs_declaration "]"
-									kwargs_declaration: KEYWORD ":" " "* args_declaration
+									function_signature: "define" " "+ FUNAME " "* "[" args_declaration (" "* kwargs_declaration)? "]"
+									kwargs_declaration: kwargset_declaration | kwargset_declaration kwargs_declaration
+									kwargset_declaration: KEYWORD ":" " "* args_declaration
 									args_declaration: var_declaration | var_declaration " "* "," " "* args_declaration
 									var_declaration: "$" VAR
 									block: "do" /\s/+ statements /\s/+ "end"
 									statements: statement | statement statements
-									statement: value | variable_set | function_declaration | block | output_statement
-									output_statement: "output" " "+ statement
+									statement: value | variable_set | function_declaration | block | return_statement
+									return_statement: "return" " "+ statement
 									variable_set: VAR " "* "=" " "* value
 									value: sequence | numeric | variable
 									variable: "$" VAR
@@ -59,11 +60,13 @@ resolve = {
 	'statement': None,
 	'statements': ListConverter,
 	'block' : Block,
-	#'function_declaration': FunctionDeclaration,
-	#'function_signature': FunctionSignature,
-	'output_statement': ReturnStatement,
-	#'kwargs_declaration': ListConverter,
-	#'args_declaration': ListConverter,
+	'function_declaration': FunctionDeclaration,
+	'function_signature': FunctionSignature,
+	'return_statement': ReturnStatement,
+	'kwargs_declaration': ListConverter,
+	'args_declaration': ListConverter,
+	'var_declaration': None,
+	'kwargset_declaration': (lambda x, y: (x, y)),
 }
 
 # transform a string into an internal representation

@@ -177,18 +177,18 @@ class ListConverter(Expression):
 class Context:
 	def top():
 		return Context._context
-	_context = ChainMap
+	_context = ChainMap()
 
 # represents an expression which assigns a value to a variable
 class VariableSetter(ValueExpression):
 	def __init__(self, varname, value):
 		self.varname = varname.eval()
 		self.value = value
-		self.context = Context.context()
+		self.context = Context.top()
 	def eval(self):
-		self.context.namespace[self.varname] = self.value.eval()
+		self.context[self.varname] = self.value.eval()
 	def distribution(self):
-		self.context.namespace[self.varname] = self.value.distribution()
+		self.context[self.varname] = self.value.distribution()
 
 # represents an expression which gets a value from a variable
 class VariableGetter(ValueExpression):
@@ -197,12 +197,17 @@ class VariableGetter(ValueExpression):
 		self.context = Context.top()
 	def lookup(self):
 		return self.context[self.varname.eval()]
+	def _eval(self, method):
+		val = self.lookup()
+		if hasattr(val, method):
+			eval_method = getattr(val, method)
+			return eval_method()
+		else:
+			return val
 	def eval(self):
-		val = self.lookup()
-		return val.eval()
+		return self._eval('eval')
 	def distribution(self):
-		val = self.lookup()
-		return val.distribution()
+		return self._eval('distribution')
 
 class Block(ValueExpression):
 	def __init__(self, statements):
@@ -251,4 +256,65 @@ class ReturnStatement(ValueExpression):
 	def sequence(self):
 		return self.wrapped.sequence()
 
-		
+class FunctionSignature():
+	def __init__(self, name, argslist, kwargslist=None):
+		self._name = name
+		self.argslist = argslist.sequence()
+		if kwargslist:
+			self.kwargslist = [(kwargset[0].eval(), kwargset[1].sequence()) for kwargset in kwargslist.sequence()]
+		else:
+			self.kwargslist = None
+	def name(self):
+		argsnum = len(self.argslist)
+		if self.kwargslist:
+			kwargs_nums = tuple([(kwargset[0], len(kwargset[1])) for kwargset in self.kwargslist])
+		else:
+			kwargs_nums = ()
+		return (self._name.eval(), argsnum, kwargs_nums)
+	def bind_function(self):
+		def bind(*args, **kwargs):
+			binds = []
+			for i in range(len(self.argslist)):
+				varname = self.argslist[i]
+				value = args[i]
+				varset = VariableSetter(varname, value)
+				binds.append(varset)
+			if self.kwargslist:
+				for kwargset in self.kwargslist:
+					kwarg_key = kwargset[0]
+					passed_kwargs = kwargs[kwarg_key]
+					kwargset_kwargs = kwargset[1]
+					for i in range(len(kwargset_kwargs)):
+						varname = kwargset_kwargs[i]
+						value = passed_kwargs[i]
+						varset = VariableSetter(varname, value)
+						binds.append(varset)
+			return binds
+		return bind
+
+class ListWrapper(Literal):
+	def sequence(self):
+		return self.value
+	def distribution_sequence(self):
+		return [v.distribution() for i in self.value]
+
+class FunctionDeclaration(Expression):
+	def __init__(self, signature, block):
+		self.signature = signature
+		self.block = block
+		self.bind = signature.bind_function()
+	def eval(self):
+		def call(*args, **kwargs):
+			binds = self.bind(*args, **kwargs)
+			statements = self.block.statements
+			return Block(ListWrapper(binds+statements))
+		def eval_call(*args, **kwargs):
+			runblock = call(*args, **kwargs)
+			return runblock.eval()
+		def distribution_call(*args, **kwargs):
+			runblock = call(*args, **kwargs)
+			return runclock.distribution()
+		FunctionCall.symbols[self.signature.name()] = eval_call
+		print(FunctionCall.symbols)
+		FunctionCall.distr_symbols[self.signature.name()] = distribution_call
+	
